@@ -63,26 +63,39 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   const nfc_id = document.getElementById("nfc_id").value.trim();
   const pin = document.getElementById("pin").value.trim();
   const device_id = "web_client_01";
-  
+
   const res = document.getElementById("result");
   res.textContent = "⏳ Autenticando...";
-  
+
+  if (!nfc_id || !pin) {
+    res.textContent = "⚠️ Debes ingresar UID y PIN";
+    return;
+  }
+
   try {
-    // 🔹 Cambié localhost por tu backend en Render
     const response = await fetch("https://back4-20.onrender.com/authenticate", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({nfc_id, pin, device_id})
     });
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      res.textContent = `✅ ${data.message}\n👤 ${data.user.full_name}\n🏢 ${data.user.department}\n🔗 Tx: ${data.blockchain_tx}`;
-    } else {
-      res.textContent = `❌ ${data.message}`;
+
+    if (!response.ok) {
+      res.textContent = `⚠️ Error del servidor: ${response.status}`;
+      return;
     }
+
+    const data = await response.json();
+    console.log("Respuesta del backend:", data); // Para depuración
+
+    if (data.success) {
+      const user = data.user || {};
+      res.textContent = `✅ ${data.message}\n👤 ${user.full_name || 'No disponible'}\n🏢 ${user.department || 'No disponible'}\n🔗 Tx: ${data.blockchain_tx || 'No disponible'}`;
+    } else {
+      res.textContent = `❌ ${data.message || 'Error desconocido'}`;
+    }
+
   } catch (err) {
+    console.error(err);
     res.textContent = "⚠️ Error al conectar con el servidor.";
   }
 });
