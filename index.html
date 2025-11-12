@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Login NFC + Blockchain</title>
 <style>
 body {
@@ -14,12 +14,13 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
+  margin: 0;
 }
 form {
   background: rgba(255, 255, 255, 0.1);
   padding: 2rem;
   border-radius: 10px;
-  width: 300px;
+  width: 320px;
   text-align: center;
 }
 input {
@@ -28,6 +29,12 @@ input {
   margin: 10px 0;
   border: none;
   border-radius: 5px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
 }
 button {
   padding: 10px;
@@ -38,28 +45,107 @@ button {
   border-radius: 5px;
   cursor: pointer;
 }
-button:hover {
-  background: #00e676;
+.small-btn {
+  width: auto;
+  padding: 8px 12px;
+  background: #2962ff;
+  border-radius: 5px;
 }
-#result {
-  margin-top: 15px;
+button:hover { filter: brightness(1.05); }
+.small-btn:hover { filter: brightness(1.05); }
+#result, #checkResult {
+  margin-top: 12px;
   white-space: pre-line;
+  text-align: left;
+  font-size: 14px;
+}
+.badge-valid {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #00c853;
+  color: #002000;
+  border-radius: 6px;
+  font-weight: bold;
+}
+.badge-invalid {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #ff5252;
+  color: #300000;
+  border-radius: 6px;
+  font-weight: bold;
+}
+a {
+  color: #bbffcc;
 }
 </style>
 </head>
 <body>
   <form id="loginForm">
     <h2>Autenticación NFC</h2>
-    <input type="text" id="nfc_id" placeholder="UID NFC" required>
+
+    <!-- fila con input NFC y boton verificar -->
+    <div class="row" style="width:100%; justify-content: center;">
+      <input type="text" id="nfc_id" placeholder="UID NFC" required style="width:60%;">
+      <button type="button" id="checkBtn" class="small-btn">Verificar tarjeta</button>
+    </div>
+
     <input type="password" id="pin" placeholder="PIN" required>
+
     <button type="submit">Iniciar Sesión</button>
+
+    <div id="checkResult"></div>
     <div id="result"></div>
   </form>
 
 <script>
+const BACKEND_BASE = "https://back4-22.onrender.com"; // <- tu backend en Render
+
+// Verificar tarjeta (botón "Verificar tarjeta")
+document.getElementById("checkBtn").addEventListener("click", async () => {
+  const nfc = document.getElementById("nfc_id").value.trim();
+  const checkEl = document.getElementById("checkResult");
+  checkEl.textContent = "⏳ Verificando...";
+  if (!nfc) {
+    checkEl.innerHTML = "⚠️ Ingresa un UID NFC para verificar.";
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${BACKEND_BASE}/nfc/check?nfc_id=${encodeURIComponent(nfc)}`, {
+      method: "GET",
+      headers: { "Accept": "application/json" }
+    });
+
+    if (!resp.ok) {
+      checkEl.textContent = `⚠️ Error al verificar: ${resp.status}`;
+      return;
+    }
+
+    const data = await resp.json();
+    console.log("check response:", data);
+
+    if (data.registered) {
+      // Muestra badge y datos
+      const full = data.full_name || "Sin nombre";
+      const dept = data.department || "Sin departamento";
+      const sec = data.security_level !== undefined ? data.security_level : "N/A";
+      checkEl.innerHTML = `<span class="badge-valid">VÁLIDA</span>  ${full} — ${dept} (nivel ${sec})`;
+    } else {
+      const reason = data.error ? ` (${data.error})` : "";
+      checkEl.innerHTML = `<span class="badge-invalid">NO REGISTRADA</span>${reason} <br> Si corresponde, registra la tarjeta desde el panel de administración.`;
+    }
+
+  } catch (err) {
+    console.error("error fetch check:", err);
+    checkEl.textContent = `⚠️ Error al conectar con el servidor: ${err.message || err}`;
+  }
+});
+
+// Envío del formulario (login)
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  
+
   const nfc_id = document.getElementById("nfc_id").value.trim();
   const pin = document.getElementById("pin").value.trim();
   const device_id = "web_client_01";
@@ -73,35 +159,36 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   }
 
   try {
-    const response = await fetch("https://back4-23.onrender.com/authenticate", {
+    const response = await fetch(`${BACKEND_BASE}/authenticate`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({nfc_id, pin, device_id})
     });
 
     if (!response.ok) {
-      res.textContent = `⚠️ Error del servidor: ${response.status}`;
+      // muestra status y texto del servidor si hay
+      const txt = await response.text().catch(()=>"");
+      res.textContent = `⚠️ Error del servidor: ${response.status} ${txt}`;
       return;
     }
 
     const data = await response.json();
-    console.log("Respuesta del backend:", data); // Para depuración
+    console.log("Respuesta del backend:", data); // depuración
 
     if (data.success) {
       const user = data.user || {};
       res.textContent = `✅ ${data.message}\n👤 ${user.full_name || 'No disponible'}\n🏢 ${user.department || 'No disponible'}\n🔗 Tx: ${data.blockchain_tx || 'No disponible'}`;
+      // opcional: redirigir si quieres
+      // window.location.href = "/dashboard.html";
     } else {
       res.textContent = `❌ ${data.message || 'Error desconocido'}`;
     }
 
   } catch (err) {
     console.error(err);
-    res.textContent = "⚠️ Error al conectar con el servidor.";
+    res.textContent = `⚠️ Error al conectar con el servidor: ${err.message || err}`;
   }
 });
 </script>
 </body>
 </html>
-
-
-
